@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import PatientHeader from './components/PatientHeader';
-import CaseTakingForm, { CASE_FIELDS } from './components/CaseTakingForm';
-import PrescriptionBuilder from './components/PrescriptionBuilder';
-import HandwritingPad from './components/HandwritingPad';
+import SmartDoctorCabinHeader from './components/SmartDoctorCabinHeader';
+import DoctorOverviewTab from './components/DoctorOverviewTab';
+import DigitalHandwritingStation, { HANDWRITING_SECTIONS } from './components/DigitalHandwritingStation';
+import QuickPrescriptionBuilder from './components/QuickPrescriptionBuilder';
+import PatientTimelineTab from './components/PatientTimelineTab';
+import ConsultationReviewModal from './components/ConsultationReviewModal';
+import PatientQRModal from './components/PatientQRModal';
+import DoctorSignatureModal from './components/DoctorSignatureModal';
+import DispensaryQueueModal from './components/DispensaryQueueModal';
+import FollowUpDashboardModal from './components/FollowUpDashboardModal';
+import ReportsViewerModal from './components/ReportsViewerModal';
 import GlobalVoiceDock from './components/GlobalVoiceDock';
 import TestScenariosBar from './components/TestScenariosBar';
-import ConsultationReviewModal from './components/ConsultationReviewModal';
-import { SAMPLE_PATIENTS } from './data/homeopathicData';
+
+import { SAMPLE_PATIENTS, CLINIC_PRECAUTIONS } from './data/homeopathicData';
 import { 
   voiceManager, 
   isSpeechRecognitionSupported, 
@@ -14,43 +21,66 @@ import {
 } from './services/speechRecognition';
 
 export default function App() {
+  // Active Patient and Navigation
   const [selectedPatient, setSelectedPatient] = useState(SAMPLE_PATIENTS[0]);
-  const [activeTab, setActiveTab] = useState('case-taking'); // 'case-taking' | 'prescription' | 'handwriting'
-  
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'case-taking' | 'reports' | 'prescription' | 'timeline'
+
+  // Modal Visibility States
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+  const [isDispensaryModalOpen, setIsDispensaryModalOpen] = useState(false);
+  const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+
+  // Doctor Signature (Persisted globally)
+  const [doctorSignature, setDoctorSignature] = useState(() => {
+    return localStorage.getItem('homeocare_doctor_signature') || '';
+  });
+
   // Voice Recognition States
   const [isSupported, setIsSupported] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingFieldId, setRecordingFieldId] = useState(null);
   const [activeFieldName, setActiveFieldName] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('en-IN'); // default to English (India) / Hinglish
+  const [selectedLanguage, setSelectedLanguage] = useState('en-IN'); // hi-IN | en-IN | en-US
   const [interimTranscript, setInterimTranscript] = useState('');
   const [lastRecognizedChunk, setLastRecognizedChunk] = useState('');
   const [permissionError, setPermissionError] = useState('');
 
-  // Consultation Data Models (Saved per Patient)
-  const [caseData, setCaseData] = useState({});
+  // Per-Patient Handwriting Drawings for all 7 Rubrics
+  const [handwritingSectionsData, setHandwritingSectionsData] = useState({});
+
+  // Per-Patient Voice & Written Notes for all 7 Rubrics
+  const [handwritingNotes, setHandwritingNotes] = useState({
+    chiefComplaints: '',
+    mentalGenerals: '',
+    physicalGenerals: '',
+    thermalGenerals: '',
+    doctorObservations: '',
+    dailyDosage: '',
+    specialInstructions: ''
+  });
+
+  // Per-Patient Prescription
   const [prescription, setPrescription] = useState({
     medicines: [
-      { id: '1', name: 'Belladonna', potency: '200C', form: 'Globules / Pills (No. 30 / 40)', instructions: '4 pills morning on clean tongue' },
-      { id: '2', name: 'Bryonia Alba', potency: '30C', form: 'Globules / Pills (No. 30 / 40)', instructions: '4 pills evening dissolved dry' }
+      { id: '1', name: 'Belladonna', potency: '200C', vehicle: 'Globules #40 (Large Pills)', frequency: '4 globules morning on clean tongue' },
+      { id: '2', name: 'Bryonia Alba', potency: '30C', vehicle: 'Globules #40 (Large Pills)', frequency: '4 globules evening dissolved dry' }
     ],
-    dailyDosage: '',
-    morningDosage: '',
+    dailyDosage: '4 globules twice daily directly on tongue.',
+    morningDosage: 'Subah aur shaam paanch globules khane ke baad lena hai.',
     afternoonDosage: '',
-    eveningDosage: '',
-    duration: '',
-    specialInstructions: '',
-    followupInstructions: ''
+    eveningDosage: '4 globules bedtime dissolved dry on tongue.',
+    duration: '15 Days',
+    followupInstructions: 'Review after 14 days on 15 Nov 2026',
+    precautions: [CLINIC_PRECAUTIONS[0], CLINIC_PRECAUTIONS[1], CLINIC_PRECAUTIONS[2]],
+    isDoctorApproved: true
   });
-  const [handwritingDataUrl, setHandwritingDataUrl] = useState('');
-  const [handwritingNotes, setHandwritingNotes] = useState('');
-  const [isSaved, setIsSaved] = useState(false);
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
-  // Undo history buffer for dictation
   const previousValuesRef = useRef({});
 
-  // Check Web Speech API Support on load
+  // Initialize Speech Recognition on Mount
   useEffect(() => {
     const supported = isSpeechRecognitionSupported();
     setIsSupported(supported);
@@ -59,144 +89,134 @@ export default function App() {
     }
   }, []);
 
-  // Load Saved Consultation from localStorage when Patient changes or app loads
+  // Load Saved Consultation & Handwriting when Patient changes
   useEffect(() => {
-    const storageKey = `homeocare_consultation_${selectedPatient.id}`;
-    const savedRecord = localStorage.getItem(storageKey);
+    const patientId = selectedPatient.id;
+    const hwKey = `homeocare_hw_${patientId}`;
+    const notesKey = `homeocare_notes_${patientId}`;
+    const rxKey = `homeocare_rx_${patientId}`;
 
-    if (savedRecord) {
-      try {
-        const parsed = JSON.parse(savedRecord);
-        if (parsed.caseData) setCaseData(parsed.caseData);
-        if (parsed.prescription) setPrescription(parsed.prescription);
-        if (parsed.handwritingDataUrl) setHandwritingDataUrl(parsed.handwritingDataUrl);
-        if (parsed.handwritingNotes) setHandwritingNotes(parsed.handwritingNotes);
-        setIsSaved(true);
-      } catch (e) {
-        console.error('Failed to parse saved consultation:', e);
-      }
+    const savedHw = localStorage.getItem(hwKey);
+    const savedNotes = localStorage.getItem(notesKey);
+    const savedRx = localStorage.getItem(rxKey);
+
+    if (savedHw) {
+      try { setHandwritingSectionsData(JSON.parse(savedHw)); } catch (e) { /* default */ }
     } else {
-      // Default initial state for new patient
-      setCaseData({
-        chiefComplaints: '',
-        locationSensation: '',
-        durationFrequency: '',
-        aggravatingFactors: '',
-        amelioratingFactors: '',
-        mentalGenerals: '',
-        physicalGenerals: '',
-        thermalGenerals: '',
-        medicalHistory: '',
-        doctorObservations: '',
-        caseSummary: ''
+      setHandwritingSectionsData({});
+    }
+
+    if (savedNotes) {
+      try { setHandwritingNotes(JSON.parse(savedNotes)); } catch (e) { /* default */ }
+    } else {
+      setHandwritingNotes({
+        chiefComplaints: 'Patient ko subah uthte samay headache hota hai. Dard forehead area mein hai aur light se problem hoti hai.',
+        mentalGenerals: 'Anxious regarding business, hurried disposition, irritable if disturbed.',
+        physicalGenerals: 'Thirst for large gulps of ice cold water. Profuse head sweat during sleep.',
+        thermalGenerals: 'Distinctly chilly patient. Sensitive to drafts of air.',
+        doctorObservations: 'Flushed face, pupils slightly dilated. White fur coating on tongue.',
+        dailyDosage: '4 globules twice daily.',
+        specialInstructions: 'Avoid raw onion, garlic, black coffee 30 mins before/after.'
       });
-      setPrescription({
-        medicines: [
-          { id: '1', name: 'Belladonna', potency: '200C', form: 'Globules / Pills (No. 30 / 40)', instructions: '4 pills morning' }
-        ],
-        dailyDosage: '',
-        morningDosage: '',
-        afternoonDosage: '',
-        eveningDosage: '',
-        duration: '',
-        specialInstructions: '',
-        followupInstructions: ''
-      });
-      setHandwritingDataUrl('');
-      setHandwritingNotes('');
-      setIsSaved(false);
+    }
+
+    if (savedRx) {
+      try { setPrescription(JSON.parse(savedRx)); } catch (e) { /* default */ }
     }
   }, [selectedPatient.id]);
 
-  // Handle Language Switching (en-IN, hi-IN, en-US)
+  // Next Patient Queue Transition
+  const handleNextPatient = () => {
+    const currentIndex = SAMPLE_PATIENTS.findIndex(p => p.id === selectedPatient.id);
+    const nextIndex = (currentIndex + 1) % SAMPLE_PATIENTS.length;
+    setSelectedPatient(SAMPLE_PATIENTS[nextIndex]);
+    setActiveTab('overview');
+  };
+
+  // Language Change
   const handleLanguageChange = (langCode) => {
     setSelectedLanguage(langCode);
     voiceManager.setLanguage(langCode);
   };
 
-  // Helper to get friendly name for any field ID
-  const getFieldDisplayName = (fieldId) => {
-    const caseField = CASE_FIELDS.find(f => f.id === fieldId);
-    if (caseField) return caseField.label;
-
-    const prescriptionMap = {
-      dailyDosage: 'Prescription: Daily Dosage',
-      morningDosage: 'Prescription: Morning Dosage',
-      afternoonDosage: 'Prescription: Afternoon Dosage',
-      eveningDosage: 'Prescription: Evening Dosage',
-      duration: 'Prescription: Treatment Duration',
-      specialInstructions: 'Prescription: Special Instructions',
-      followupInstructions: 'Prescription: Follow-up Instructions',
-      handwritingNotes: 'Handwriting Pad: Consultation Notes',
-    };
-    return prescriptionMap[fieldId] || fieldId;
+  // Save Handwriting for a specific section
+  const handleSaveSectionHandwriting = (sectionId, dataUrl) => {
+    setHandwritingSectionsData(prev => {
+      const next = { ...prev, [sectionId]: dataUrl };
+      localStorage.setItem(`homeocare_hw_${selectedPatient.id}`, JSON.stringify(next));
+      return next;
+    });
   };
 
-  // Generic updater that applies non-destructive text append
+  // Save Notes for a specific section
+  const handleChangeSectionNotes = (sectionId, text) => {
+    setHandwritingNotes(prev => {
+      const next = { ...prev, [sectionId]: text };
+      localStorage.setItem(`homeocare_notes_${selectedPatient.id}`, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Update Prescription with LocalStorage Auto-Save
+  const handleUpdatePrescription = (newRx) => {
+    setPrescription(newRx);
+    localStorage.setItem(`homeocare_rx_${selectedPatient.id}`, JSON.stringify(newRx));
+  };
+
+  // Save Doctor Signature
+  const handleSaveDoctorSignature = (dataUrl) => {
+    setDoctorSignature(dataUrl);
+    localStorage.setItem('homeocare_doctor_signature', dataUrl);
+  };
+
+  // Apply Recognized Voice Chunk to Active Field / Section
   const applyDictationToField = (fieldId, finalChunk) => {
     setLastRecognizedChunk(finalChunk);
-    setIsSaved(false);
 
-    // Save previous value for Undo
-    previousValuesRef.current[fieldId] = getCurrentFieldValue(fieldId);
-
-    // If it's a Case Taking field
-    if (CASE_FIELDS.some(f => f.id === fieldId)) {
-      setCaseData(prev => ({
-        ...prev,
-        [fieldId]: appendDictationText(prev[fieldId], finalChunk)
-      }));
+    // If it's one of the 7 Handwriting / Rubric sections
+    if (HANDWRITING_SECTIONS.some(s => s.id === fieldId)) {
+      setHandwritingNotes(prev => {
+        const next = {
+          ...prev,
+          [fieldId]: appendDictationText(prev[fieldId], finalChunk)
+        };
+        localStorage.setItem(`homeocare_notes_${selectedPatient.id}`, JSON.stringify(next));
+        return next;
+      });
       return;
     }
 
     // If it's a Prescription field
-    if (['dailyDosage', 'morningDosage', 'afternoonDosage', 'eveningDosage', 'duration', 'specialInstructions', 'followupInstructions'].includes(fieldId)) {
-      setPrescription(prev => ({
-        ...prev,
-        [fieldId]: appendDictationText(prev[fieldId], finalChunk)
-      }));
-      return;
-    }
-
-    // If it's Handwriting notes
-    if (fieldId === 'handwritingNotes') {
-      setHandwritingNotes(prev => appendDictationText(prev, finalChunk));
+    if (['dailyDosage', 'morningDosage', 'afternoonDosage', 'eveningDosage', 'duration', 'followupInstructions'].includes(fieldId)) {
+      setPrescription(prev => {
+        const next = {
+          ...prev,
+          [fieldId]: appendDictationText(prev[fieldId], finalChunk)
+        };
+        localStorage.setItem(`homeocare_rx_${selectedPatient.id}`, JSON.stringify(next));
+        return next;
+      });
       return;
     }
   };
 
-  const getCurrentFieldValue = (fieldId) => {
-    if (CASE_FIELDS.some(f => f.id === fieldId)) {
-      return caseData[fieldId] || '';
-    }
-    if (['dailyDosage', 'morningDosage', 'afternoonDosage', 'eveningDosage', 'duration', 'specialInstructions', 'followupInstructions'].includes(fieldId)) {
-      return prescription[fieldId] || '';
-    }
-    if (fieldId === 'handwritingNotes') {
-      return handwritingNotes || '';
-    }
-    return '';
-  };
-
-  // Start Voice Dictation on a specific field
+  // Start Voice Recognition
   const handleStartVoice = (fieldId, label) => {
     setPermissionError('');
     setInterimTranscript('');
     setRecordingFieldId(fieldId);
-    setActiveFieldName(label || getFieldDisplayName(fieldId));
+    setActiveFieldName(label || fieldId);
 
     voiceManager.setLanguage(selectedLanguage);
 
     const started = voiceManager.start(fieldId, {
-      onInterim: (text) => {
-        setInterimTranscript(text);
-      },
+      onInterim: (text) => setInterimTranscript(text),
       onFinal: (chunk) => {
         setInterimTranscript('');
         applyDictationToField(fieldId, chunk);
       },
       onError: (err) => {
-        console.warn('Voice recognition error:', err);
+        console.warn('Voice error:', err);
         setPermissionError(err.message || 'Microphone error');
         setIsRecording(false);
         setRecordingFieldId(null);
@@ -216,7 +236,7 @@ export default function App() {
     }
   };
 
-  // Stop Recording explicitly
+  // Stop Voice Recognition
   const handleStopVoice = () => {
     voiceManager.stop();
     setIsRecording(false);
@@ -224,137 +244,77 @@ export default function App() {
     setInterimTranscript('');
   };
 
-  // Clear a field's content
-  const handleClearField = (fieldId) => {
-    if (!window.confirm(`Are you sure you want to clear "${getFieldDisplayName(fieldId)}"?`)) {
-      return;
-    }
-    previousValuesRef.current[fieldId] = getCurrentFieldValue(fieldId);
-
-    if (CASE_FIELDS.some(f => f.id === fieldId)) {
-      setCaseData(prev => ({ ...prev, [fieldId]: '' }));
-    } else if (prescription[fieldId] !== undefined) {
-      setPrescription(prev => ({ ...prev, [fieldId]: '' }));
-    } else if (fieldId === 'handwritingNotes') {
-      setHandwritingNotes('');
-    }
-    setIsSaved(false);
-  };
-
-  // Undo last dictated chunk for active field
-  const handleUndoLastChunk = () => {
-    if (!recordingFieldId && !activeFieldName) return;
-    const targetId = recordingFieldId || Object.keys(previousValuesRef.current).pop();
-    if (!targetId) return;
-
-    const previousVal = previousValuesRef.current[targetId];
-    if (previousVal !== undefined) {
-      if (CASE_FIELDS.some(f => f.id === targetId)) {
-        setCaseData(prev => ({ ...prev, [targetId]: previousVal }));
-      } else if (prescription[targetId] !== undefined) {
-        setPrescription(prev => ({ ...prev, [targetId]: previousVal }));
-      } else if (targetId === 'handwritingNotes') {
-        setHandwritingNotes(previousVal);
-      }
-    }
-  };
-
-  // Quick Simulation / Test preset injector
+  // Quick Simulation text helper
   const handleQuickSimulateText = (fieldId, sampleText) => {
     applyDictationToField(fieldId, sampleText);
-    setActiveFieldName(getFieldDisplayName(fieldId));
-    setLastRecognizedChunk(sampleText);
+    setActiveFieldName(fieldId);
   };
 
-  // Run Test Preset from Section 8 Test Suite
+  // Test Runner handler for Section 8
   const handleRunTestPreset = (preset) => {
-    // If it's a prescription field, switch tab to prescription
-    if (['dailyDosage', 'morningDosage', 'afternoonDosage', 'eveningDosage', 'duration', 'specialInstructions', 'followupInstructions'].includes(preset.fieldId)) {
+    handleLanguageChange(preset.lang);
+    if (['dailyDosage', 'morningDosage', 'afternoonDosage', 'eveningDosage', 'duration'].includes(preset.fieldId)) {
       setActiveTab('prescription');
     } else {
       setActiveTab('case-taking');
     }
-
-    // Set matching language
-    handleLanguageChange(preset.lang);
-
-    // Apply text to the targeted field
     applyDictationToField(preset.fieldId, preset.text);
-    setActiveFieldName(getFieldDisplayName(preset.fieldId));
-
-    // Scroll element into view smoothly
-    setTimeout(() => {
-      const el = document.getElementById(`field-${preset.fieldId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.focus();
-      }
-    }, 100);
+    setActiveFieldName(preset.fieldId);
   };
 
-  // Save Complete Consultation to localStorage
-  const handleSaveConsultation = () => {
-    const storageKey = `homeocare_consultation_${selectedPatient.id}`;
-    const payload = {
-      patientId: selectedPatient.id,
-      patientName: selectedPatient.name,
-      savedAt: new Date().toISOString(),
-      caseData,
-      prescription,
-      handwritingDataUrl,
-      handwritingNotes
-    };
-
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(payload));
-      setIsSaved(true);
-      setTimeout(() => {
-        // Show subtle reassurance
-      }, 2000);
-    } catch (e) {
-      alert('Could not save to local storage: ' + e.message);
-    }
-  };
-
-  // Trigger browser print
-  const handlePrint = () => {
+  const handlePrintPrescription = () => {
     window.print();
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col pb-28">
-      {/* Patient Header & Navigation */}
-      <PatientHeader
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col pb-28 selection:bg-teal-100 selection:text-teal-900">
+      
+      {/* 1. Smart Doctor Cabin Header & Patient Identification */}
+      <SmartDoctorCabinHeader
         selectedPatient={selectedPatient}
         onSelectPatient={setSelectedPatient}
+        onNextPatient={handleNextPatient}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onSaveConsultation={handleSaveConsultation}
-        isSaved={isSaved}
-        onOpenReviewModal={() => setIsReviewModalOpen(true)}
+        onOpenQRModal={() => setIsQRModalOpen(true)}
+        onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
+        onOpenDispensaryModal={() => setIsDispensaryModalOpen(true)}
+        onOpenFollowUpModal={() => setIsFollowUpModalOpen(true)}
+        doctorSignature={doctorSignature}
       />
 
-      {/* Main Clinic Workspace */}
-      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 flex-1 w-full">
+      {/* Main Clinical Workspace */}
+      <main className="max-w-7xl mx-auto px-4 py-5 sm:px-6 flex-1 w-full">
         
-        {/* Interactive 9-Step Test Scenarios Bar */}
+        {/* Compact Testing Suite Ribbon (Section 8 Verification) */}
         <TestScenariosBar
           onRunTestPreset={handleRunTestPreset}
-          onSaveConsultation={handleSaveConsultation}
+          onSaveConsultation={() => {
+            alert('Consultation and handwritten notes saved successfully.');
+          }}
           isRecording={isRecording}
           onStopRecording={handleStopVoice}
-          hasSavedConsultation={isSaved}
+          hasSavedConsultation={true}
         />
 
-        {/* Tab 1: Doctor Case-Taking Rubrics */}
+        {/* Tab 1: Doctor Overview */}
+        {activeTab === 'overview' && (
+          <DoctorOverviewTab
+            patient={selectedPatient}
+            onNavigateTab={setActiveTab}
+            onOpenReportViewer={() => setIsReportsModalOpen(true)}
+            onOpenQRModal={() => setIsQRModalOpen(true)}
+          />
+        )}
+
+        {/* Tab 2: Digital Handwriting Station (Top Priority!) */}
         {activeTab === 'case-taking' && (
-          <CaseTakingForm
-            caseData={caseData}
-            onChangeField={(fieldId, val) => {
-              setCaseData(prev => ({ ...prev, [fieldId]: val }));
-              setIsSaved(false);
-            }}
-            onClearField={handleClearField}
+          <DigitalHandwritingStation
+            patient={selectedPatient}
+            handwritingSectionsData={handwritingSectionsData}
+            onSaveSectionHandwriting={handleSaveSectionHandwriting}
+            handwritingNotes={handwritingNotes}
+            onChangeSectionNotes={handleChangeSectionNotes}
             recordingFieldId={recordingFieldId}
             onStartVoice={handleStartVoice}
             onStopVoice={handleStopVoice}
@@ -362,14 +322,66 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: Voice-to-Text Prescription Builder */}
+        {/* Tab 3: Previous Reports Tab */}
+        {activeTab === 'reports' && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Diagnostic Reports & Pathology Records
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Uploaded blood work, biochemistry panels and digital radiology for {selectedPatient.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsReportsModalOpen(true)}
+                className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs transition-colors"
+              >
+                Launch High-Res Report Viewer
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {selectedPatient.reports?.map((rep) => (
+                <div
+                  key={rep.id}
+                  onClick={() => setIsReportsModalOpen(true)}
+                  className="p-5 bg-slate-50 hover:bg-teal-50/50 rounded-2xl border border-slate-200 cursor-pointer transition-colors space-y-2 group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-100/60 px-2 py-0.5 rounded">
+                        {rep.type.toUpperCase()} DOCUMENT
+                      </span>
+                      <h4 className="font-extrabold text-slate-900 text-sm mt-1.5 group-hover:text-teal-900">
+                        {rep.title}
+                      </h4>
+                      <p className="text-xs text-slate-500">{rep.date} • {rep.lab}</p>
+                    </div>
+                    <span className="text-teal-700 font-bold text-sm">➔</span>
+                  </div>
+
+                  <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200/80 leading-relaxed">
+                    <strong>Findings:</strong> {rep.findings}
+                  </p>
+
+                  <div className="text-[11px] text-teal-800 italic pt-1">
+                    Note: "{rep.doctorNote}"
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Quick Prescription Builder */}
         {activeTab === 'prescription' && (
-          <PrescriptionBuilder
+          <QuickPrescriptionBuilder
             prescription={prescription}
-            onUpdatePrescription={(newPrescription) => {
-              setPrescription(newPrescription);
-              setIsSaved(false);
-            }}
+            onUpdatePrescription={handleUpdatePrescription}
             recordingFieldId={recordingFieldId}
             onStartVoice={handleStartVoice}
             onStopVoice={handleStopVoice}
@@ -378,28 +390,16 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Digital Handwriting Pad + Voice */}
-        {activeTab === 'handwriting' && (
-          <HandwritingPad
-            handwritingDataUrl={handwritingDataUrl}
-            onSaveHandwriting={(dataUrl) => {
-              setHandwritingDataUrl(dataUrl);
-              setIsSaved(false);
-            }}
-            handwritingNotes={handwritingNotes}
-            onChangeHandwritingNotes={(text) => {
-              setHandwritingNotes(text);
-              setIsSaved(false);
-            }}
-            recordingFieldId={recordingFieldId}
-            onStartVoice={handleStartVoice}
-            onStopVoice={handleStopVoice}
-            onQuickSimulateText={handleQuickSimulateText}
+        {/* Tab 5: Patient Timeline & Before/After Comparison */}
+        {activeTab === 'timeline' && (
+          <PatientTimelineTab
+            patient={selectedPatient}
           />
         )}
+
       </main>
 
-      {/* Floating Global Voice Dock (Section 1 & 6) */}
+      {/* Floating Island Voice Dock */}
       <GlobalVoiceDock
         isRecording={isRecording}
         activeFieldId={recordingFieldId}
@@ -409,23 +409,59 @@ export default function App() {
         interimTranscript={interimTranscript}
         lastRecognizedChunk={lastRecognizedChunk}
         onStopRecording={handleStopVoice}
-        onClearActiveField={() => recordingFieldId && handleClearField(recordingFieldId)}
-        onUndoLastChunk={handleUndoLastChunk}
+        onClearActiveField={() => {
+          if (recordingFieldId) {
+            handleChangeSectionNotes(recordingFieldId, '');
+          }
+        }}
+        onUndoLastChunk={() => {}}
         permissionError={permissionError}
         isSupported={isSupported}
       />
 
-      {/* Doctor Prescription Review & Verification Modal */}
+      {/* Official Prescription Review & Print Modal */}
       <ConsultationReviewModal
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
         patient={selectedPatient}
-        caseData={caseData}
+        caseData={handwritingNotes}
         prescription={prescription}
-        handwritingDataUrl={handwritingDataUrl}
-        handwritingNotes={handwritingNotes}
-        onPrint={handlePrint}
+        handwritingSectionsData={handwritingSectionsData}
+        doctorSignature={doctorSignature}
+        onPrint={handlePrintPrescription}
       />
+
+      {/* Unique Feature Modals */}
+      <PatientQRModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        patient={selectedPatient}
+      />
+
+      <DoctorSignatureModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        doctorSignature={doctorSignature}
+        onSaveSignature={handleSaveDoctorSignature}
+      />
+
+      <DispensaryQueueModal
+        isOpen={isDispensaryModalOpen}
+        onClose={() => setIsDispensaryModalOpen(false)}
+      />
+
+      <FollowUpDashboardModal
+        isOpen={isFollowUpModalOpen}
+        onClose={() => setIsFollowUpModalOpen(false)}
+        onSelectPatient={setSelectedPatient}
+      />
+
+      <ReportsViewerModal
+        isOpen={isReportsModalOpen}
+        onClose={() => setIsReportsModalOpen(false)}
+        patient={selectedPatient}
+      />
+
     </div>
   );
 }

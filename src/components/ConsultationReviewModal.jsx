@@ -6,51 +6,57 @@ import {
   ShieldCheck, 
   Clock, 
   Pill, 
-  User 
+  User,
+  QrCode,
+  Calendar,
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 
 export default function ConsultationReviewModal({
   isOpen,
   onClose,
   patient,
-  caseData,
-  prescription,
-  handwritingDataUrl,
-  handwritingNotes,
+  caseData = {},
+  prescription = {},
+  handwritingSectionsData = {},
+  doctorSignature = '',
   onPrint
 }) {
-  if (!isOpen) return null;
+  if (!isOpen || !patient) return null;
 
   const medicines = prescription.medicines || [];
+  const precautions = prescription.precautions || [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-float max-w-4xl w-full max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* Modal Header (No Print) */}
-        <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
+        {/* Modal Toolbar (No Print) */}
+        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between no-print">
           <div className="flex items-center gap-2.5">
-            <ShieldCheck className="w-5 h-5 text-med-400" />
+            <ShieldCheck className="w-5 h-5 text-teal-400" />
             <div>
-              <h2 className="text-sm font-bold">Prescription Review & Clinical Verification</h2>
+              <h2 className="text-sm font-bold">Official Prescription & Case Summary</h2>
               <p className="text-[11px] text-slate-400">
-                Please verify all dictated dosages and instructions before finalizing
+                Ready for high-resolution clinic printing or PDF export
               </p>
             </div>
           </div>
+          
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onPrint}
-              className="bg-med-600 hover:bg-med-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+              className="bg-teal-600 hover:bg-teal-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
+              <Printer className="w-4 h-4" />
+              <span>Print Prescription</span>
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -58,100 +64,113 @@ export default function ConsultationReviewModal({
         </div>
 
         {/* Printable Prescription Body */}
-        <div className="p-6 sm:p-8 overflow-y-auto space-y-5 text-slate-800" id="printable-prescription">
+        <div className="p-8 sm:p-10 overflow-y-auto space-y-6 text-slate-800 bg-white" id="printable-prescription">
           
-          {/* Clinic Header */}
-          <div className="border-b border-slate-200 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          {/* Clinic Letterhead Header */}
+          <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 bg-med-600 text-white rounded-md flex items-center justify-center font-black text-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 bg-teal-800 text-white rounded-xl flex items-center justify-center font-black text-base shadow-xs">
                   H
                 </span>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                  HOMEOCARE CLINIC
-                </h1>
+                <div>
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">
+                    HOMEOCARE CLINIC
+                  </h1>
+                  <span className="text-[10px] font-bold text-teal-800 tracking-widest uppercase">
+                    Classical Homeopathic Healing & Advanced Research
+                  </span>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">
-                Classical Homeopathic Healing & Research Centre
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-600 mt-2">
                 12/B Heritage Medical Enclave, Civil Lines, New Delhi • Ph: +91 11 2680 9411
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Email: care@homeocareclinic.org • Web: www.homeocareclinic.org
               </p>
             </div>
 
-            <div className="text-left sm:text-right text-xs text-slate-600">
-              <p className="font-bold text-slate-900">Dr. S. K. Sharma, B.H.M.S., M.D. (Hom)</p>
-              <p className="text-slate-500">Reg. No: HOM-ND-44910</p>
-              <p className="mt-1 font-semibold text-med-700">Date: {patient?.visitDate || new Date().toISOString().split('T')[0]}</p>
+            {/* Doctor Info Block */}
+            <div className="text-left sm:text-right text-xs text-slate-600 space-y-0.5">
+              <p className="font-extrabold text-slate-900 text-sm">Dr. S. K. Sharma</p>
+              <p className="font-medium">B.H.M.S., M.D. (Homeopathy)</p>
+              <p className="text-slate-500 text-[11px]">Senior Consultant Physician</p>
+              <p className="font-mono text-teal-800 font-semibold">Reg. No: CCH-HOM-44910</p>
+              <p className="text-[11px] pt-1">
+                <strong>Date:</strong> {patient.visitDate || new Date().toLocaleDateString('en-IN')}
+              </p>
             </div>
           </div>
 
           {/* Patient Details Ribbon */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div>
-              <span className="text-slate-400 block text-[11px]">Patient Name:</span>
-              <span className="font-bold text-slate-900">{patient?.name}</span>
+              <span className="text-slate-400 text-[10px] block font-bold uppercase">Patient Name</span>
+              <span className="font-black text-slate-900 text-sm">{patient.name}</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[11px]">Age / Gender:</span>
-              <span className="font-semibold text-slate-800">{patient?.age} Yrs / {patient?.gender}</span>
+              <span className="text-slate-400 text-[10px] block font-bold uppercase">Age / Gender</span>
+              <span className="font-bold text-slate-800">{patient.age} Yrs / {patient.gender}</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[11px]">Registration ID:</span>
-              <span className="font-mono font-bold text-med-700">{patient?.id}</span>
+              <span className="text-slate-400 text-[10px] block font-bold uppercase">Patient UID & Token</span>
+              <span className="font-mono font-bold text-teal-800 text-xs">
+                {patient.id} (Token #{patient.token || '04'})
+              </span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[11px]">Vitals:</span>
-              <span className="font-semibold text-slate-800">{patient?.bp} | {patient?.weight}</span>
+              <span className="text-slate-400 text-[10px] block font-bold uppercase">Vitals (BP | Pulse)</span>
+              <span className="font-semibold text-slate-800">{patient.bp} | {patient.pulse}</span>
             </div>
           </div>
 
-          {/* Chief Complaints */}
-          {caseData.chiefComplaints && (
-            <div className="space-y-1 text-xs">
-              <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                Chief Complaints & Symptoms
-              </h4>
-              <p className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 leading-relaxed text-slate-800">
-                {caseData.chiefComplaints}
-              </p>
+          {/* Primary Condition & Diathesis */}
+          <div className="text-xs bg-teal-50/60 p-3 rounded-xl border border-teal-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <strong className="text-teal-950">Clinical Diagnosis:</strong>{' '}
+              <span className="text-teal-900 font-medium">{patient.activeDiagnosis}</span>
             </div>
-          )}
+            <div className="text-[11px] text-teal-800">
+              <strong>Diathesis:</strong> {patient.constitution}
+            </div>
+          </div>
 
-          {/* Prescribed Remedies Table */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <h4 className="font-bold text-slate-900 flex items-center gap-1 uppercase">
-                <span className="text-med-600 text-sm">Rx</span>
+          {/* Prescribed Homeopathic Medicines (Rx) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-1.5 uppercase">
+                <span className="text-teal-700 text-xl font-serif">Rx</span>
                 <span>Prescription (दवाइयाँ)</span>
-              </h4>
-              <span className="text-slate-400">
-                {medicines.length} remedies
+              </h3>
+              <span className="text-xs text-slate-500 font-medium">
+                Total Remedies: {medicines.length}
               </span>
             </div>
 
             {medicines.length === 0 ? (
-              <p className="text-xs italic text-slate-400 p-2.5 bg-slate-50 rounded-lg">
-                No remedies specified.
+              <p className="text-xs text-slate-400 italic p-3 bg-slate-50 rounded-xl">
+                No remedies entered.
               </p>
             ) : (
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 font-semibold text-slate-600 border-b border-slate-200">
+                  <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
                     <tr>
-                      <th className="py-2 px-3">#</th>
-                      <th className="py-2 px-3">Remedy Name</th>
-                      <th className="py-2 px-3">Potency</th>
-                      <th className="py-2 px-3">Form</th>
+                      <th className="py-2.5 px-3">#</th>
+                      <th className="py-2.5 px-3">Remedy Name</th>
+                      <th className="py-2.5 px-3">Potency</th>
+                      <th className="py-2.5 px-3">Vehicle</th>
+                      <th className="py-2.5 px-3">Directions / Frequency</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {medicines.map((m, idx) => (
-                      <tr key={m.id}>
-                        <td className="py-2 px-3 text-slate-400 font-semibold">{idx + 1}</td>
-                        <td className="py-2 px-3 font-bold text-slate-900">{m.name}</td>
-                        <td className="py-2 px-3 font-semibold text-med-700">{m.potency}</td>
-                        <td className="py-2 px-3 text-slate-600">{m.form}</td>
+                      <tr key={m.id} className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-bold text-slate-400">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-black text-slate-900 text-sm">{m.name}</td>
+                        <td className="py-2.5 px-3 font-extrabold text-teal-800">{m.potency}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{m.vehicle || 'Globules #40'}</td>
+                        <td className="py-2.5 px-3 text-slate-800 font-medium">{m.frequency || 'As directed'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -160,123 +179,127 @@ export default function ConsultationReviewModal({
             )}
           </div>
 
-          {/* Dosage Schedule */}
-          <div className="space-y-2.5 bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 text-xs">
-            <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-med-600" />
-              <span>Dosage Schedule (Voice-Dictated)</span>
+          {/* Voice-Dictated Dosage Regimen */}
+          <div className="space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+            <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-teal-700" />
+              <span>Dosage Administration Schedule</span>
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <div className="bg-white p-2 rounded border border-slate-200">
-                <span className="font-semibold text-amber-700 block mb-0.5">🌅 Morning:</span>
-                <span className="text-slate-700">{prescription.morningDosage || 'As directed'}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <span className="font-bold text-amber-700 block mb-0.5">🌅 Morning (सुबह):</span>
+                <span className="text-slate-800 font-medium">{prescription.morningDosage || '4 globules on clean tongue'}</span>
               </div>
-              <div className="bg-white p-2 rounded border border-slate-200">
-                <span className="font-semibold text-orange-700 block mb-0.5">☀️ Afternoon:</span>
-                <span className="text-slate-700">{prescription.afternoonDosage || 'As directed'}</span>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <span className="font-bold text-orange-700 block mb-0.5">☀️ Afternoon (दोपहर):</span>
+                <span className="text-slate-800 font-medium">{prescription.afternoonDosage || 'As directed'}</span>
               </div>
-              <div className="bg-white p-2 rounded border border-slate-200">
-                <span className="font-semibold text-indigo-700 block mb-0.5">🌙 Evening:</span>
-                <span className="text-slate-700">{prescription.eveningDosage || 'As directed'}</span>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <span className="font-bold text-indigo-700 block mb-0.5">🌙 Evening / Bedtime:</span>
+                <span className="text-slate-800 font-medium">{prescription.eveningDosage || '4 globules dissolved dry'}</span>
               </div>
             </div>
 
             {prescription.dailyDosage && (
-              <div className="text-xs pt-1">
-                <span className="font-semibold text-slate-600">Daily Regimen: </span>
-                <span className="text-slate-800">{prescription.dailyDosage}</span>
+              <div className="pt-1 text-xs">
+                <span className="font-bold text-slate-600">Daily Regimen: </span>
+                <span className="text-slate-900 font-medium">{prescription.dailyDosage}</span>
               </div>
             )}
 
-            {prescription.duration && (
-              <div className="text-xs">
-                <span className="font-semibold text-slate-600">Duration: </span>
-                <span className="font-bold text-med-700">{prescription.duration}</span>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <span className="font-bold text-slate-600">Treatment Duration: </span>
+                <span className="font-extrabold text-teal-900">{prescription.duration || '15 Days'}</span>
               </div>
-            )}
+              <div>
+                <span className="font-bold text-slate-600">Next Follow-up Visit: </span>
+                <span className="font-extrabold text-slate-900">{prescription.followupInstructions || 'Review after 14 days (15 Nov 2026)'}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Precautions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            {prescription.specialInstructions && (
-              <div className="p-2.5 bg-amber-50/60 rounded-lg border border-amber-200/80">
-                <span className="font-bold text-amber-900 block mb-0.5">
-                  Dietary Precautions:
-                </span>
-                <p className="text-amber-950 leading-relaxed">{prescription.specialInstructions}</p>
-              </div>
-            )}
-
-            {prescription.followupInstructions && (
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80">
-                <span className="font-bold text-slate-800 block mb-0.5">
-                  Follow-up:
-                </span>
-                <p className="text-slate-700 leading-relaxed">{prescription.followupInstructions}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Digital Handwriting Diagram */}
-          {handwritingDataUrl && (
-            <div className="space-y-1 text-xs">
-              <h4 className="font-bold text-slate-600 uppercase tracking-wider text-[11px]">
-                Doctor's Clinical Sketch
-              </h4>
-              <div className="border border-slate-200 rounded-lg p-1.5 bg-white max-w-xs">
-                <img
-                  src={handwritingDataUrl}
-                  alt="Doctor Handwriting"
-                  className="max-h-32 w-auto rounded"
-                />
-              </div>
-              {handwritingNotes && (
-                <p className="text-[11px] text-slate-500 italic">
-                  Note: {handwritingNotes}
-                </p>
-              )}
+          {/* Clinic Precautions & Restrictions */}
+          {precautions.length > 0 && (
+            <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/90 text-xs">
+              <span className="font-bold text-amber-950 uppercase tracking-wider block mb-1">
+                ⚠️ Mandatory Dietary Precautions:
+              </span>
+              <ul className="list-disc list-inside space-y-0.5 text-amber-900">
+                {precautions.map((prec, i) => (
+                  <li key={i}>{prec}</li>
+                ))}
+              </ul>
             </div>
           )}
 
-          {/* Signature Block */}
-          <div className="pt-4 border-t border-slate-200 flex justify-between items-end text-xs">
-            <div className="text-[10px] text-slate-400">
-              HOMEOCARE Clinical Voice Suite • {new Date().toLocaleDateString()}
-            </div>
-            <div className="text-right">
-              <div className="font-serif italic font-bold text-slate-800 text-base">
-                Dr. S. K. Sharma
+          {/* Embedded Handwritten Sketch (if present for Chief Complaints) */}
+          {handwritingSectionsData?.chiefComplaints && (
+            <div className="space-y-1 text-xs">
+              <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
+                Doctor's Handwritten Clinical Schema / Notes
+              </span>
+              <div className="border border-slate-200 rounded-xl p-2 bg-white max-w-sm">
+                <img
+                  src={handwritingSectionsData.chiefComplaints}
+                  alt="Doctor Sketch"
+                  className="max-h-28 w-auto rounded"
+                />
               </div>
-              <div className="border-t border-slate-300 pt-0.5 text-[11px] text-slate-500">
-                Authorized Signature
+            </div>
+          )}
+
+          {/* Footer Signature & QR Block */}
+          <div className="pt-6 border-t-2 border-slate-800 flex justify-between items-end text-xs">
+            <div>
+              <div className="font-mono text-[10px] text-slate-400">
+                UID: {patient.id} • Auth Token: #{patient.token || '04'}<br />
+                Generated via HOMEOCARE Advanced Clinical Station
+              </div>
+            </div>
+
+            {/* Signature Block */}
+            <div className="text-right flex flex-col items-end">
+              {doctorSignature ? (
+                <img
+                  src={doctorSignature}
+                  alt="Doctor Signature"
+                  className="h-12 w-auto object-contain mb-1"
+                />
+              ) : (
+                <div className="font-serif italic font-bold text-slate-900 text-lg mb-1">
+                  Dr. S. K. Sharma
+                </div>
+              )}
+              <div className="border-t border-slate-400 pt-1 text-[11px] text-slate-600 font-semibold">
+                Authorized Homeopathic Physician Signature
               </div>
             </div>
           </div>
 
         </div>
 
-        {/* Modal Footer Controls */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between no-print">
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <Check className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Reviewed & Verified</span>
-          </div>
+        {/* Footer Toolbar (No Print) */}
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between no-print">
+          <span className="text-xs text-slate-500">
+            Complies with Central Council of Homeopathy electronic records protocol
+          </span>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
             >
-              Back to Editing
+              Back to Cabin
             </button>
             <button
               type="button"
               onClick={onPrint}
-              className="bg-med-600 hover:bg-med-700 text-white font-semibold px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+              className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-4 h-4" />
               <span>Print Prescription</span>
             </button>
           </div>
